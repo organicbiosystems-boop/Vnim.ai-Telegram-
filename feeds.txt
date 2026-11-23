@@ -1,0 +1,16 @@
+# RSS-источники, по одному на строку. Строки с # игнорируются.
+# Официальные блоги лабораторий
+https://openai.com/news/rss.xml
+https://deepmind.google/blog/rss.xml
+https://blog.google/technology/ai/rss/
+https://huggingface.co/blog/feed.xml
+# Новостные издания
+https://techcrunch.com/category/artificial-intelligence/feed/
+https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
+https://venturebeat.com/category/ai/feed/
+https://www.marktechpost.com/feed/
+# Hacker News: только популярные посты про ИИ
+https://hnrss.org/newest?q=AI+OR+LLM+OR+GPT+OR+Claude+OR+Gemini&points=150
+# Хабр: ИИ и машинное обучение
+https://habr.com/ru/rss/hub/artificial_intelligence/all/?fl=ru
+https://habr.com/ru/rss/hub/machine_learning/all/?fl=ru
