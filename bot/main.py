@@ -14,7 +14,7 @@ from telegram import (
     Update,
 )
 from telegram.constants import ParseMode
-from telegram.error import NetworkError, TelegramError
+from telegram.error import NetworkError, RetryAfter, TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -424,14 +424,20 @@ async def run_once(nb: NewsBot, app: Application, linger_sec: int) -> None:
     """Один проход для запуска по расписанию (GitHub Actions):
     обработать накопившиеся нажатия кнопок и сообщения, проверить ленты,
     ещё немного послушать Telegram и выйти."""
-    for attempt in range(1, 4):
+    for attempt in range(1, 6):
         try:
             await app.initialize()
             break
-        except NetworkError as e:
-            if attempt == 3:
+        except RetryAfter as e:
+            wait = float(getattr(e.retry_after, "total_seconds", lambda: e.retry_after)()) + 1
+            if attempt == 5:
                 raise
-            log.warning("Telegram не ответил (%s), повтор %d/3 через 10 с", e, attempt)
+            log.warning("Telegram просит подождать %.0f с, повтор %d/5", wait, attempt)
+            await asyncio.sleep(wait)
+        except NetworkError as e:
+            if attempt == 5:
+                raise
+            log.warning("Telegram не ответил (%s), повтор %d/5 через 10 с", e, attempt)
             await asyncio.sleep(10)
     async with app:
         await app.start()
