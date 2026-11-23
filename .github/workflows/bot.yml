@@ -1,8 +1,9 @@
 name: VNIM.AI bot
 
 on:
-  schedule:
-    - cron: "*/10 * * * *"   # каждые 10 минут (GitHub иногда запускает с опозданием)
+  # Расписание временно выключено, пока не решена проблема с токеном Telegram.
+  # schedule:
+  #   - cron: "*/10 * * * *"   # каждые 10 минут (GitHub иногда запускает с опозданием)
   workflow_dispatch: {}       # кнопка «Run workflow» для ручного запуска
 
 concurrency:
