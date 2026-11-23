@@ -1,9 +1,11 @@
 """VNIM.AI news bot: собирает ИИ-новости, публикует важные сразу,
 остальные отправляет вам с партнёром на одобрение и учится на ваших решениях."""
+import argparse
 import asyncio
 import html
 import logging
 import time
+from types import SimpleNamespace
 
 from telegram import (
     InlineKeyboardButton,
@@ -35,6 +37,15 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("vnim")
 
 EXAMPLES_PER_CLASS = 25
+
+
+async def _answer(q, text=None, **kw) -> None:
+    """Ответ на нажатие кнопки. В режиме по расписанию нажатие может прийти
+    с задержкой, и Telegram уже не принимает ответ — это не ошибка."""
+    try:
+        await q.answer(text, **kw)
+    except TelegramError:
+        pass
 
 
 class NewsBot:
@@ -292,14 +303,18 @@ class NewsBot:
     async def cmd_cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self.is_admin(update):
             return
-        context.user_data.pop("editing", None)
+        self.db.set_kv(f"editing:{update.effective_user.id}", "")
         await update.message.reply_text("Ок, отменено.")
 
     async def on_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self.is_admin(update):
             return
         text = update.message.text.strip()
-        editing = context.user_data.pop("editing", None)
+        key = f"editing:{update.effective_user.id}"
+        raw_editing = self.db.get_kv(key) or ""
+        editing = int(raw_editing) if raw_editing else None
+        if editing is not None:
+            self.db.set_kv(key, "")
         if editing is not None:
             row = self.db.get(editing)
             if row is None or row["status"] != "pending":
@@ -337,22 +352,22 @@ class NewsBot:
     async def on_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         q = update.callback_query
         if not self.is_admin(update):
-            await q.answer("Нет доступа")
+            await _answer(q, "Нет доступа")
             return
         action, _, raw_id = q.data.partition(":")
         news_id = int(raw_id)
         row = self.db.get(news_id)
         who = html.escape(update.effective_user.first_name or "админ")
         if row is None:
-            await q.answer("Новость не найдена")
+            await _answer(q, "Новость не найдена")
             return
 
         if action in ("pub", "rej", "edit") and row["status"] != "pending":
-            await q.answer("Уже обработано")
+            await _answer(q, "Уже обработано")
             return
 
         if action == "pub":
-            await q.answer("Публикую…")
+            await _answer(q, "Публикую…")
             if await self.publish(context.bot, news_id, "manual"):
                 self.db.update(news_id, human_label=1, decided_by=update.effective_user.id)
                 await self.update_admin_msgs(
@@ -360,11 +375,11 @@ class NewsBot:
                 )
         elif action == "rej":
             self.db.update(news_id, status="rejected", human_label=0, decided_by=update.effective_user.id)
-            await q.answer("Отклонено — учту")
+            await _answer(q, "Отклонено — учту")
             await self.update_admin_msgs(context.bot, news_id, f"❌ <b>Отклонено</b> — {who}")
         elif action == "edit":
-            context.user_data["editing"] = news_id
-            await q.answer()
+            self.db.set_kv(f"editing:{update.effective_user.id}", str(news_id))
+            await _answer(q, )
             await context.bot.send_message(
                 update.effective_user.id,
                 "Пришлите новый текст поста.\nПервая строка — заголовок, остальное — текст.\n"
@@ -372,34 +387,64 @@ class NewsBot:
             )
         elif action == "del":
             if row["status"] != "published":
-                await q.answer("Пост уже не в канале")
+                await _answer(q, "Пост уже не в канале")
                 return
             try:
                 await context.bot.delete_message(self.cfg.channel_id, row["channel_message_id"])
             except TelegramError as e:
-                await q.answer(f"Не удалось удалить: {e}", show_alert=True)
+                await _answer(q, f"Не удалось удалить: {e}", show_alert=True)
                 return
             # Удаление = сигнал «такое не публикуем» (кроме срочных — у них своё правило)
             label = None if row["publish_mode"] == "auto_breaking" else 0
             self.db.update(news_id, status="rejected", human_label=label,
                            decided_by=update.effective_user.id)
-            await q.answer("Удалено — учту")
+            await _answer(q, "Удалено — учту")
             await self.update_admin_msgs(context.bot, news_id, f"🗑 <b>Удалено из канала</b> — {who}")
 
 
-def main() -> None:
-    cfg = load_config()
-    nb = NewsBot(cfg)
-    app = Application.builder().token(cfg.bot_token).build()
+def build_app(nb: NewsBot) -> Application:
+    app = Application.builder().token(nb.cfg.bot_token).build()
     app.add_handler(CommandHandler("start", nb.cmd_start))
     app.add_handler(CommandHandler("stats", nb.cmd_stats))
     app.add_handler(CommandHandler("check", nb.cmd_check))
     app.add_handler(CommandHandler("cancel", nb.cmd_cancel))
     app.add_handler(CallbackQueryHandler(nb.on_button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, nb.on_text))
+    return app
+
+
+async def run_once(nb: NewsBot, app: Application, linger_sec: int) -> None:
+    """Один проход для запуска по расписанию (GitHub Actions):
+    обработать накопившиеся нажатия кнопок и сообщения, проверить ленты,
+    ещё немного послушать Telegram и выйти."""
+    async with app:
+        await app.start()
+        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        await asyncio.sleep(5)  # сначала разбираем накопившиеся нажатия кнопок
+        if nb.cfg.admin_ids:
+            await nb.poll(SimpleNamespace(bot=app.bot))
+        await asyncio.sleep(linger_sec)
+        await app.updater.stop()
+        await app.stop()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--once", action="store_true",
+                        help="один проход и выход (для запуска по расписанию)")
+    parser.add_argument("--linger", type=int, default=45,
+                        help="сколько секунд слушать Telegram после проверки лент в режиме --once")
+    args = parser.parse_args()
+
+    cfg = load_config()
+    nb = NewsBot(cfg)
+    app = build_app(nb)
+    log.info("Канал %s, админы %s", cfg.channel_id, sorted(cfg.admin_ids))
+    if args.once:
+        asyncio.run(run_once(nb, app, args.linger))
+        return
     if cfg.admin_ids:
         app.job_queue.run_repeating(nb.poll, interval=cfg.poll_interval_min * 60, first=10)
-    log.info("Бот запущен, канал %s, админы %s", cfg.channel_id, sorted(cfg.admin_ids))
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
