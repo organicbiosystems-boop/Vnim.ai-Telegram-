@@ -397,7 +397,8 @@ def main() -> None:
     app.add_handler(CommandHandler("cancel", nb.cmd_cancel))
     app.add_handler(CallbackQueryHandler(nb.on_button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, nb.on_text))
-    app.job_queue.run_repeating(nb.poll, interval=cfg.poll_interval_min * 60, first=10)
+    if cfg.admin_ids:
+        app.job_queue.run_repeating(nb.poll, interval=cfg.poll_interval_min * 60, first=10)
     log.info("Бот запущен, канал %s, админы %s", cfg.channel_id, sorted(cfg.admin_ids))
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 

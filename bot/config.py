@@ -41,8 +41,11 @@ class Config:
 
 def load_config() -> Config:
     admin_ids = frozenset(
-        int(x) for x in _required("ADMIN_IDS").replace(" ", "").split(",") if x
+        int(x) for x in os.getenv("ADMIN_IDS", "").replace(" ", "").split(",") if x
     )
+    if not admin_ids:
+        print("ADMIN_IDS не задан: бот будет только отвечать на /start вашим id. "
+              "Впишите id в .env и перезапустите.")
     return Config(
         bot_token=_required("TELEGRAM_BOT_TOKEN"),
         channel_id=_required("CHANNEL_ID"),
