@@ -14,7 +14,7 @@ from telegram import (
     Update,
 )
 from telegram.constants import ParseMode
-from telegram.error import TelegramError
+from telegram.error import NetworkError, TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -403,7 +403,14 @@ class NewsBot:
 
 
 def build_app(nb: NewsBot) -> Application:
-    app = Application.builder().token(nb.cfg.bot_token).build()
+    app = (
+        Application.builder()
+        .token(nb.cfg.bot_token)
+        # Сеть до Telegram иногда отвечает медленно — ждём дольше стандартных 5 секунд
+        .connect_timeout(30).read_timeout(30).write_timeout(30).pool_timeout(30)
+        .get_updates_connect_timeout(30).get_updates_read_timeout(30)
+        .build()
+    )
     app.add_handler(CommandHandler("start", nb.cmd_start))
     app.add_handler(CommandHandler("stats", nb.cmd_stats))
     app.add_handler(CommandHandler("check", nb.cmd_check))
@@ -417,6 +424,15 @@ async def run_once(nb: NewsBot, app: Application, linger_sec: int) -> None:
     """Один проход для запуска по расписанию (GitHub Actions):
     обработать накопившиеся нажатия кнопок и сообщения, проверить ленты,
     ещё немного послушать Telegram и выйти."""
+    for attempt in range(1, 4):
+        try:
+            await app.initialize()
+            break
+        except NetworkError as e:
+            if attempt == 3:
+                raise
+            log.warning("Telegram не ответил (%s), повтор %d/3 через 10 с", e, attempt)
+            await asyncio.sleep(10)
     async with app:
         await app.start()
         await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
