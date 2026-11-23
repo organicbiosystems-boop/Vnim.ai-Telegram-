@@ -8,6 +8,10 @@ from pydantic import BaseModel
 log = logging.getLogger(__name__)
 
 
+# Модели, у которых есть серверный резерв на случай отказа (у Haiku его нет).
+FALLBACK_MODELS = {"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-2", "claude-fable-5-1"}
+
+
 class Evaluation(BaseModel):
     is_duplicate: bool
     tier: Literal["breaking", "regular", "skip"]
@@ -85,19 +89,25 @@ class Editor:
             f"Заголовок: {title}\n\n"
             f"Текст:\n{summary or '(нет текста)'}"
         )
+        params = dict(
+            model=self.model,
+            max_tokens=8000,
+            output_config={"effort": self.effort},
+            system=system,
+            messages=[{"role": "user", "content": user}],
+            output_format=Evaluation,
+        )
         try:
-            resp = await self.client.beta.messages.parse(
-                model=self.model,
-                max_tokens=8000,
-                # Если основная модель откажется отвечать по соображениям
-                # безопасности, API сам повторит запрос на резервной модели.
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-                output_config={"effort": self.effort},
-                system=system,
-                messages=[{"role": "user", "content": user}],
-                output_format=Evaluation,
-            )
+            if self.model in FALLBACK_MODELS:
+                # Если модель откажется отвечать по соображениям безопасности,
+                # API сам повторит запрос на резервной модели.
+                resp = await self.client.beta.messages.parse(
+                    **params,
+                    betas=["server-side-fallback-2026-07-01"],
+                    fallbacks="default",
+                )
+            else:
+                resp = await self.client.messages.parse(**params)
         except anthropic.RateLimitError as e:
             log.warning("Claude: превышен лимит запросов: %s", e)
             return None

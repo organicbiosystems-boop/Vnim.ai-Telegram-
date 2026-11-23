@@ -92,7 +92,7 @@ docker run -d --restart=always --env-file .env -v $(pwd)/data:/app/data --name v
 - **Как часто проверять ленты** — `POLL_INTERVAL_MIN` (минуты).
 - **Отключить автопубликацию срочных** — `AUTO_PUBLISH_BREAKING=false`.
 - **Строгость обучения** — `LEARNING_MIN_DECISIONS` и `LEARNING_TARGET_PRECISION`.
-- **Модель** — `CLAUDE_MODEL` (по умолчанию `claude-opus-5-5`), `CLAUDE_EFFORT` (`low` дешевле, `high` тщательнее).
+- **Модель** — `CLAUDE_MODEL` (по умолчанию `claude-haiku-5-5` — дёшево; `claude-sonnet-5-5` или `claude-opus-5-5` — лучше тексты, но дороже), `CLAUDE_EFFORT` (`low` дешевле, `high` тщательнее).
 
 ## Команды
 

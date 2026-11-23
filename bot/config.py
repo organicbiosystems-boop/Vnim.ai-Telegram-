@@ -25,7 +25,7 @@ class Config:
     bot_token: str
     channel_id: str
     admin_ids: frozenset[int]
-    claude_model: str = "claude-opus-5-5"
+    claude_model: str = "claude-haiku-5-5"
     claude_effort: str = "medium"
     poll_interval_min: int = 10
     signature: str = "VNIM.AI"
@@ -50,7 +50,7 @@ def load_config() -> Config:
         bot_token=_required("TELEGRAM_BOT_TOKEN"),
         channel_id=_required("CHANNEL_ID"),
         admin_ids=admin_ids,
-        claude_model=os.getenv("CLAUDE_MODEL", "claude-opus-5-5"),
+        claude_model=os.getenv("CLAUDE_MODEL", "claude-haiku-5-5"),
         claude_effort=os.getenv("CLAUDE_EFFORT", "medium"),
         poll_interval_min=int(os.getenv("POLL_INTERVAL_MIN", "10")),
         signature=os.getenv("SIGNATURE", "VNIM.AI"),
