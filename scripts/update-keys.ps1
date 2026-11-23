@@ -32,6 +32,7 @@ Stop-ScheduledTask -TaskName $Task -ErrorAction SilentlyContinue
 Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
     Where-Object { $_.CommandLine -like '*bot.main*' } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Enable-ScheduledTask -TaskName $Task | Out-Null
 Start-ScheduledTask -TaskName $Task
 Start-Sleep -Seconds 15
 Get-Content "$Dir\data\bot.log" -Tail 8 -Encoding UTF8
