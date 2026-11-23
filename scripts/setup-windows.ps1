@@ -69,7 +69,7 @@ Step 'Проверяю токен Telegram'
 $check = @'
 import os, json, urllib.request, urllib.error
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(".env")
 url = "https://api.telegram.org/bot%s/getMe" % os.environ["TELEGRAM_BOT_TOKEN"]
 try:
     print(urllib.request.urlopen(url, timeout=40).read().decode())
@@ -95,6 +95,6 @@ Start-ScheduledTask -TaskName $Task
 
 Start-Sleep -Seconds 20
 Step 'Последние строки лога'
-if (Test-Path "$Dir\data\bot.log") { Get-Content "$Dir\data\bot.log" -Tail 15 }
+if (Test-Path "$Dir\data\bot.log") { Get-Content "$Dir\data\bot.log" -Tail 15 -Encoding UTF8 }
 Write-Host "`nГотово. Бот работает в фоне и сам запускается после перезагрузки сервера." -ForegroundColor Green
 Write-Host "Лог: $Dir\data\bot.log"
