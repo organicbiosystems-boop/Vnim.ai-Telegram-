@@ -60,6 +60,7 @@ jobs:
         continue-on-error: true
         run: |
           curl -sS -m 60 -o /dev/null -w "api.telegram.org HTTP %{http_code} in %{time_total}s\n" https://api.telegram.org/
+          echo "== fake token"; curl -sS -m 40 -w "\n(%{http_code}, %{time_total}s)\n" "https://api.telegram.org/bot123456:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/getMe"; echo
           for m in getMe getWebhookInfo getMe; do
             echo "== $m"; curl -sS -m 40 -w "\n(%{http_code}, %{time_total}s)\n" "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/$m" | head -c 600; echo
           done
